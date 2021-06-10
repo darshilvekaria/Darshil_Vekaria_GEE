@@ -1,0 +1,259 @@
+/********************************************************************************************
+                               TASK ASSIGNED:
+To create a Time Series graph of MSAVI 2 index for the three locations 
+and analyse the outputs for the study period of January,2020 to June,2020
+*********************************************************************************************/
+
+
+/********************************************************************************************
+                                Workflow     
+1) To load sentinel-1 data and write a cloud mask function for it.
+2) Locate all the three places.
+3) To write a function to calculate MSAVI2 and adds it as a band in the image.
+4) Prepare Time Series graph of MSAVI 2 index for place-1 and analyze it.
+5) Prepare Time Series graph of MSAVI 2 index for place-2 and analyze it.
+6) Prepare Time Series graph of MSAVI 2 index for place-3 and analyze it.
+7) To map MSAVI2 imagery
+8) Conclusion.
+*********************************************************************************************/
+
+//------------------------------- Step1: Sentinel-2 data and cloud masking --------------------------//
+
+//Load Sentinel-2 Level2A Surface Reflectance imagery, which is Bottom-Of-Atmosphere (BOA) corrected reflectance product.
+var s2 = ee.ImageCollection("COPERNICUS/S2_SR");
+
+// Writing a function to mask out the cloud cover
+function maskS2clouds(image) {
+  var qa = image.select('QA60');
+
+  // Bits 10 and 11 are clouds and cirrus, respectively.
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+
+  // Both flags should be set to zero, indicating clear conditions.
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+      .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+
+  return image.updateMask(mask)
+              .select("B.*")
+              .copyProperties(image, ["system:time_start"])
+}
+
+
+//------------------------------- Step2: Locate all the three places --------------------------//
+// Location of place 1 
+
+var  Place_1 = ee.Geometry.Polygon(
+  [
+  [75.45157492160797, 30.634404129904425],
+  [75.4524278640747, 30.63372099804389],
+  [75.45236885547638, 30.634399514164798],
+  [75.45157492160797, 30.634404129904425]
+  ]);
+Map.addLayer(Place_1, {color: 'blue'}, 'Place A',0);
+// Map.centerObject(Place_1,16);
+
+
+// Location of place 2
+var  Place_2 = ee.Geometry.Polygon(
+  [
+  [85.85622847080231, 26.09425078918021],
+  [85.85590660572052, 26.093581136401006], 
+  [85.85663080215454, 26.09337879451938 ], 
+  [85.85686147212981, 26.094009907326967],
+  [85.85622847080231, 26.09425078918021]
+]);
+Map.addLayer(Place_2, {color: 'blue'}, 'Place B',0);
+// Map.centerObject(Place_2,16);
+
+
+// Location of place 3
+var  Place_3 = ee.Geometry.Polygon(
+  [
+  [78.66571158170699, 17.66869116558751],
+  [78.6662346124649, 17.6686911655875],
+  [78.6662346124649, 17.66929686130703],
+  [78.66571158170699, 17.66929686130703],
+  [78.66571158170699, 17.66869116558751]
+]);
+Map.addLayer(Place_3, {color: 'blue'}, 'Place C',0);
+// Map.centerObject(Place_3,16);
+
+
+//-------------------------------------Step3:  ------------------------------------------------//
+//------Following function helps to calculate MSAVI2 and adds it as a band in the image--------//
+
+function addMSAVI2(image) {
+  var MSAVI2 = image.expression(
+  '(2 * NIR + 1 - sqrt(pow((2 * NIR + 1), 2) - 8 * (NIR - RED)) ) / 2', 
+  {
+    'NIR': image.select('B8'), 
+    'RED': image.select('B4')
+  }).rename('MSAVI2');
+  return image.addBands(MSAVI2);
+}
+
+//-------------------------------------Step4:  ------------------------------------------//
+// ------Prepare Time Series graph of MSAVI 2 index for Place-1 and analyze it-----------//
+
+// Filtering data for place-1
+var S2_place_1 = s2
+  .filter(ee.Filter.date('2020-01-01', '2020-07-01'))
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))
+  .filter(ee.Filter.bounds(Place_1))
+
+
+//-------To apply a function to every Image in an ImageCollection, .map() is useful------//
+
+// Apply cloudmask function(maskS2clouds) to image collection
+var S2_place_1 = S2_place_1.map(maskS2clouds)
+
+// Add MSAVI2 band to image collection
+var S2_place_1 = S2_place_1.map(addMSAVI2);
+print('Place_1', S2_place_1);
+
+
+// Create a time series chart.
+var Chart_Place_1 = ui.Chart.image.seriesByRegion(S2_place_1, Place_1, ee.Reducer.mean(),
+'MSAVI2',10,'system:time_start','system:index')
+                .setChartType('LineChart').setSeriesNames(['MSAVI2']).setOptions({
+                title: 'MSAVI2 time series for Place 1',
+                series: {0: {lineWidth: 2, color: '1D6B99', pointSize: 2}},
+                hAxis: {title: 'Date', format: 'dd-MM-yy'},
+                vAxis: {title: 'MSAVI2'} })
+                
+
+print(Chart_Place_1);
+
+
+//-------------------------------------Step5:  ------------------------------------------//
+// ------Prepare Time Series graph of MSAVI 2 index for Place-2 and analyze it-----------//
+
+// Filtering data for place-2
+var S2_place_2 = s2
+  .filter(ee.Filter.date('2020-01-01', '2020-07-01'))
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))
+  .filter(ee.Filter.bounds(Place_2))
+
+
+// Apply cloudmask function(maskS2clouds) to image collection
+var S2_place_2 = S2_place_2.map(maskS2clouds)
+
+// Add MSAVI2 band to image collection
+var S2_place_2 = S2_place_2.map(addMSAVI2);
+print('Place_2', S2_place_2);
+
+
+// Create a time series chart.
+var Chart_Place_2 = ui.Chart.image.seriesByRegion(S2_place_2, Place_2, ee.Reducer.mean(),
+'MSAVI2',10,'system:time_start','system:index')
+                .setChartType('LineChart').setSeriesNames(['MSAVI2']).setOptions({
+                title: 'MSAVI2 time series for Place 2',
+                series: {0: {lineWidth: 2, color: '1D6B99', pointSize: 2}},
+                hAxis: {title: 'Date', format: 'dd-MM-yy'},
+                vAxis: {title: 'MSAVI2'} })
+                
+
+print(Chart_Place_2);
+
+//-------------------------------------Step6:  ------------------------------------------//
+// ------Prepare Time Series graph of MSAVI 2 index for Place-3 and analyze it-----------//
+
+// Filtering data for place-3
+var S2_place_3 = s2
+  .filter(ee.Filter.date('2020-01-01', '2020-07-01'))
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+  .filter(ee.Filter.bounds(Place_3))
+
+
+// Apply cloudmask function(maskS2clouds) to image collection
+var S2_place_3 = S2_place_3.map(maskS2clouds)
+
+
+// Add MSAVI2 band to image collection
+var S2_place_3 = S2_place_3.map(addMSAVI2);
+print('Place_3', S2_place_3);
+
+
+// Create a time series chart.
+var Chart_Place_3 = ui.Chart.image.seriesByRegion(S2_place_3, Place_3, ee.Reducer.mean(),
+'MSAVI2',10,'system:time_start','system:index')
+                .setChartType('LineChart').setSeriesNames(['MSAVI2']).setOptions({
+                title: 'MSAVI2 time series for Place 3',
+                series: {0: {lineWidth: 2, color: '1D6B99', pointSize: 2}},
+                hAxis: {title: 'Date', format: 'dd-MM-yy'},
+                vAxis: {title: 'MSAVI2'} })
+                
+
+print(Chart_Place_3);
+
+//-------------------------------------Step7:  ------------------------------------------//
+// ------------------------------Mapping MSAVI2 imagery---------------------- -----------//
+
+// var img = s2
+//           .filterBounds(Place_3)
+//           .filterDate('2020-03-01' , '2020-03-31')
+//           // .filter(ee.Filter.lt('CLOUD_COVER', 30))
+//           .sort('system:time_start', true)
+//           .median()
+//           .clip(Place_3);
+
+// // compute MSAVI2 using expression
+// var msavi2 = img.expression(
+//   '(2 * NIR + 1 - sqrt(pow((2 * NIR + 1), 2) - 8 * (NIR - RED)) ) / 2', 
+//   {
+//     'NIR': img.select('B8'), 
+//     'RED': img.select('B4')
+//   }
+// );
+
+
+// // msavi2 visualizing parameters
+// var colorizedVis = {
+//   min: 0,
+//   max: 1,
+//   palette: [
+//     'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+//     '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+//     '012E01', '011D01', '011301']};
+
+// //Display the colorized dataset
+// Map.centerObject(Place_3,16);
+// Map.addLayer(msavi2, colorizedVis, 'MSAVI2',1);
+
+
+// **************************************************************************************
+
+/********************************************************************************************
+                                        Step 8: Conclusion
+                                        
+1) For location 1,(One of the corner of Farm,adjacent to road, near Lakha, Punjab)
+
+   Crop was fully matured (Ripening stage) in the start and mid of January (0.86), 
+   At the end of January, harvesting of crops may have started (0.6) and at the start of April
+   land was barren with no crops (0.1). Along with this other crop may be sown at the start of 
+   April and it may have grown to reach the maturity stage in mid of May, but then it was harvested 
+   in June as monsoon starts.
+
+
+2) For location 2,(One of the corner of Farm, near Taralahi, Bihar)   
+   
+   There were crops in the farmland from January to February (0.75 to 0.93). With the start of
+   March, reduction in greenery (crops) started and it kept on decreasing till May (lowest 0.2)
+   and it was not possible get MSAVI2 values in June, because of more cloud cover.
+   
+   
+3) For location 3,(Farmland, near potharam, Telangana) 
+ 
+  From January to March, there was greenery (above 0.73) and with the arrival of April month,
+  value starts decreasing and it reached 0.3 at the end of May month. Again like location-2
+  scenerio, it was not possible get MSAVI2 values in June, because of more cloud cover.
+  
+  
+Overall, for location 2 and location 3, almost similar trend was seen (decreasing trend of MSAVI2 values),
+whereas for location 1, there was change in the trend. Within short term period of April to mid of May,
+values of MSAVI2 increased from 0.1 to 0.83. For Location 1,there were less cloud cover in the month
+of June compared to Location 2 and Location 3.
+
+   
+*********************************************************************************************/
