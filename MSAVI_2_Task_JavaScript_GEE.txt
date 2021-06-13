@@ -12,7 +12,7 @@ and analyse the outputs for the study period of January,2020 to June,2020
                                 Workflow     
 1) To load sentinel-2 data and write a cloud mask function for it.
 2) Locate all the three places.
-3) To write a function to calculate MSAVI2 and adds it as a band in the image.
+3) To write a function to calculate MSAVI2 and add it as a band in the image.
 4) Prepare Time Series graph of MSAVI2 index for place-1 and analyze it.
 5) Prepare Time Series graph of MSAVI2 index for place-2 and analyze it.
 6) Prepare Time Series graph of MSAVI2 index for place-3 and analyze it.
@@ -84,7 +84,7 @@ Map.addLayer(Place_3, {color: 'blue'}, 'Place C',0);
 
 
 //-------------------------------------Step3:  ------------------------------------------------//
-//------Following function helps to calculate MSAVI2 and adds it as a band in the image--------//
+//------Following function helps to calculate MSAVI2 and add it as a band in the image--------//
 
 function addMSAVI2(image) {
   var MSAVI2 = image.expression(
