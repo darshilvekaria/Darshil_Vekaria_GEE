@@ -1,0 +1,277 @@
+/*****************************************************************************************************************
+
+To analyze different satellite precipitation products (SPPs) like CHIPRS, IMERG and TRMM for different region of interest.
+
+*****************************************************************************************************************/
+
+//select region of interest (roi)
+var geometry = /* color: #d63000 */ee.Geometry.Polygon(
+        [[[92.79759408964337, 26.88793753454116],
+          [92.47180813602837, 26.865561739678842],
+          [92.14751176989661, 26.844902148243012],
+          [91.99777011075098, 26.83674469674733],
+          [91.913295406101, 26.830761925025975],
+          [91.81784274433734, 26.821058720257618],
+          [91.75226609794264, 26.816208155086525],
+          [91.69476132422268, 26.81254163287263],
+          [91.63451179873122, 26.81008809357187],
+          [91.58131362755996, 26.80391356974346],
+          [91.50614841825852, 26.800161570432707],
+          [91.3310339308915, 26.794261255908502],
+          [91.14222051153274, 26.78691577935913],
+          [90.7495975237914, 26.765413008381852],
+          [89.87674584726699, 26.721248087973763],
+          [89.89394937215832, 26.510870544024684],
+          [89.905622498127, 26.334859295611516],
+          [89.93716635416547, 25.975537887263172],
+          [91.85769414887851, 26.10841977661859],
+          [93.92775461701576, 26.219716491057287],
+          [93.90028726718388, 26.95283448221902]]]);
+          
+// rename selected geometry feature 
+var roi = ee.FeatureCollection(geometry);
+
+
+// select region of interest (roiA)
+var roiA = ee.FeatureCollection("users/darshil/new_polygons")
+  .filter(ee.Filter.or(ee.Filter.eq('Name','Guwahati'),
+  ee.Filter.eq('Name','Goalpara'),
+  ee.Filter.eq('Name','Tezpur')))
+
+
+// Map.addLayer(roi);
+// Map.addLayer(roiA);
+// Map.addLayer(roiB);
+// Map.addLayer(roiC);
+
+// to draw outline of roiA
+var empty = ee.Image().byte();
+var outline = empty.paint({
+  featureCollection: roiA,
+  color: 1,
+  width: 2
+});
+
+
+// Define interval for the study 
+var year_initial = 2015
+var year_final = 2019
+var month = ee.List.sequence(1,12)
+var interval = ee.List.sequence(year_initial,year_final)
+var initial = ee.Date.fromYMD(year_initial,1,1);
+var final = ee.Date.fromYMD(year_final,12,31);
+
+/************************For GPM_IMERG****************************************/
+
+// Import collection
+var GPM = ee.ImageCollection("NASA/GPM_L3/IMERG_V06")
+                            .select('precipitationCal')
+                            .filterDate(initial,final)
+                            .filterBounds(roi)
+                            
+                            
+var GPM_annual = ee.ImageCollection.fromImages(
+  interval.map(function (year) {
+    var annual = GPM.filter(ee.Filter.calendarRange(year,year, 'year'))
+        .mean()
+        .multiply(24*30*12)
+        .clip(roi)
+        .rename('Precipitation GPM');
+    return annual
+        .set('year', year)
+        .set('system:time_start', ee.Date.fromYMD(year,1,1))
+}));
+
+/************************For CHIRPS****************************************/
+
+// Import collection
+var CHIRPS = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+                               .select('precipitation')
+                               .filterDate(initial,final)
+                               .filterBounds(roi)
+                               
+var CHIRPS_annual = ee.ImageCollection.fromImages(
+  interval.map(function (year) {
+    var annual = CHIRPS.filter(ee.Filter.calendarRange(year,year, 'year'))
+        .sum()
+        .clip(roi)
+        .rename('Precipitation CHIRPS');
+    return annual
+        .set('year', year)
+        .set('system:time_start', ee.Date.fromYMD(year,1,1))
+}));
+
+/***************************FOR TRMM3B42*******************************/
+
+// Import collection
+var TRMM = ee.ImageCollection("TRMM/3B42")
+                            .select('precipitation')
+                            .filterDate(initial,final)
+                            .filterBounds(roi)
+
+var TRMM_annual = ee.ImageCollection.fromImages(
+  interval.map(function (year) {
+    var annual = TRMM.filter(ee.Filter.calendarRange(year,year, 'year'))
+        .mean()
+        .multiply(24*30*12)
+        .clip(roi)
+        .rename('Precipitation TRMM');
+    return annual
+        .set('year', year)
+        .set('system:time_start', ee.Date.fromYMD(year,1,1))
+}));
+
+
+// Join the collections GPM_IMERG and CHIRPS
+var innerJoin = ee.Join.inner();
+
+var filterTimeEq = ee.Filter.equals({
+  leftField: 'year',
+  rightField: 'year'
+})
+
+var innerJoin_GPM_CHIRPS = innerJoin.apply(GPM_annual, CHIRPS_annual, filterTimeEq);
+
+var joined_GPM_CHIRPS = innerJoin_GPM_CHIRPS.map(function(feature) {
+  return ee.Image.cat(feature.get('primary'), feature.get('secondary'));
+})
+
+var GPM_CHIRPS = ee.ImageCollection(joined_GPM_CHIRPS);
+
+print('Inner join, join the bands:', GPM_CHIRPS)
+
+
+
+// Join the collections GPM_IMERG, CHIRPS and TRMM
+
+var innerJoin_GPM_CHIRPS_TRMM = innerJoin.apply(GPM_CHIRPS, TRMM_annual, filterTimeEq);
+
+var joined_GPM_CHIRPS_TRMM = innerJoin_GPM_CHIRPS_TRMM.map(function(feature) {
+  return ee.Image.cat(feature.get('primary'), feature.get('secondary'));
+})
+
+var GPM_CHIRPS_TRMM = ee.ImageCollection(joined_GPM_CHIRPS_TRMM);
+
+print('Inner join, join the bands:', GPM_CHIRPS_TRMM)
+
+
+
+// Chart_1 : Comparision between annual precipitation(mm) obtained from different collections for region of interest (roi)
+var chart = ui.Chart.image.series(GPM_CHIRPS_TRMM.select(['Precipitation GPM', 'Precipitation CHIRPS', 'Precipitation TRMM'])
+    ,roi, ee.Reducer.mean(), 2500, 'year')
+    .setChartType('ComboChart')
+    .setSeriesNames(['Precipitation GPM', 'CHIRPS', 'TRMM'])
+    .setOptions({
+      title: 'Comparision between precipitation (mm/year) obtained from different collections for region of interest (roi)',
+      seriesType: "bars",
+      series: {
+        0: {targetaAxisIndex: 0,
+           color: 'CadetBlue'},
+        1: {
+            targetaAxisIndex: 0,
+            type: 'bars',
+            color: 'DeepSkyBlue'}, 
+        2: {
+            targetaAxisIndex: 0,
+            type: 'bars',
+            color: 'SteelBlue'},   
+      },
+        
+      vAaxis: {
+        0: {title: 'Precipitation (mm/year)'},
+      },
+      hAaxis: {
+        0: {title: 'Time interval'},
+        },
+      lineWidth: 1,
+      pointSize: 0,
+       bar: {groupWidth: '80%'}
+      });
+      
+print(chart)
+
+
+
+// Chart_1 :Variation of GPM_IMERG precipitation data for different regions (Guwahati, Goalpara and Tezpur)
+
+
+var chartP_annual = ui.Chart.image.seriesByRegion({
+    imageCollection: GPM_CHIRPS_TRMM,
+    regions: roiA,
+    reducer: ee.Reducer.mean(),
+    band: ['Precipitation GPM'],
+    scale: 2500,
+    xProperty:  'year',
+    seriesProperty: 'Name'})
+    .setOptions({
+       title: 'Annual accumulated precipitation by different regions',
+       hAxis: {title: 'Time Interval'},
+       vAxis: {title: 'Precipitation(mm)'}}
+    )
+    .setChartType('ComboChart')
+     .setOptions({
+      title: 'Comparision of GPM_IMERG precipitation data for different regions',
+      seriesType: "bars",
+      series: {
+        0: {targetaAxisIndex: 0,
+           color: 'CadetBlue'},
+        1: {
+            targetaAxisIndex: 0,
+            type: 'bars',
+            color: 'DeepSkyBlue'}, 
+        2: {
+            targetaAxisIndex: 0,
+            type: 'bars',
+            color: 'SteelBlue'},   
+      },  
+      vAaxis: {
+        0: {title: 'Precipitation (mm/year)',
+           titleTextStyle: {italic: false, bold: true}},
+      },
+      hAaxis: {
+        0: {title: 'Time interval',
+           titleTextStyle: {italic: false, bold: true}},
+      },
+      lineWidth: 1,
+      pointSize: 0,
+       bar: {groupWidth: '80%'}
+      });
+      
+print(chartP_annual)
+
+
+// **************************Mapping different Layers*************************************************
+
+Map.centerObject(roi,6);
+Map.setOptions('HYBRID')
+
+  
+// Locate all three regions (Guwahati, Goalpara and Tezpur)
+Map.addLayer(outline, {palette: 'red'}, 'Regions')
+
+
+// Visualize GPM_IMERG image for region of interest
+Map.addLayer(GPM_CHIRPS_TRMM,{
+  bands: ['Precipitation GPM'],
+  min: 1514,
+  max: 2485,
+  palette: ['red', 'blue', 'purple', 'cyan', 'green', 'yellow']
+  },'Precipitation GPM')
+  
+// Visualize CHIRPS image for region of interest
+Map.addLayer(GPM_CHIRPS_TRMM,{
+  bands: ['Precipitation CHIRPS'],
+  min: 1514,
+  max: 2485,
+  palette: ['red', 'blue', 'purple', 'cyan', 'green', 'yellow']
+  },'Precipitation CHIRPS')
+  
+// Visualize TRMM image for region of interest   
+Map.addLayer(GPM_CHIRPS_TRMM,{
+  bands: ['Precipitation TRMM'],
+  min: 1514,
+  max: 2485,
+  palette: [ 'red', 'blue', 'purple', 'cyan', 'green', 'yellow']
+  },'Precipitation TRMM')
+  
+
