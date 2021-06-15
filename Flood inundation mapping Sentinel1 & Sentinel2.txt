@@ -41,18 +41,21 @@ function maskS2clouds(image) {
   var cloudBitMask = 1 << 10;
   var cirrusBitMask = 1 << 11;
 
-  // Both flags should be set to zero, indicating clear conditions.
+  // Both values should be set to zero
   var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
       .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
-
+      
+  // Masking out cloud cover from the image
   return image.updateMask(mask).divide(10000);
 }
 
 
+// filter the image collection as per the requirement
 var filtered_s2 = s2.filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 70))
   .filter(ee.Filter.date('2020-05-01', '2020-05-31'))
   .filter(ee.Filter.bounds(aoi))
 
+// mask out the cloud cover from the image and clip it to the region of interest
 var image = filtered_s2.map(maskS2clouds).median(); 
 
 
@@ -72,13 +75,17 @@ Map.addLayer(mndwi.clip(aoi), ndwiVis, 'mndwi',1)
 Can be left default or change it if there are many false positives
 *********************************************************************************************/
 
-var polarization = "VH"; 
+var polarization = "VH"; /*It can be changed to "VV", As at depends on the area of interest.*/
 
-var pass_direction = "DESCENDING"; 
+var pass_direction = "DESCENDING"; /* In more areas there can be more "Ascending" images compared to descending images.
+                                      So, select accordingly. But, only one pass will be selected at a time.*/
 
-var difference_threshold = 1.25; 
+var difference_threshold = 1.25; /*This threshold value can be selected as per trial and error, if there are more
+                                   false positives then change it. There are many methods used to identify this
+                                   threshold value like otsu's method of thresholding, K-means clusturing etc.*/
 
 //var relative_orbit = 79; 
+/*Apply it if the relative orbit for your study area is known.*/
 
 
 //------------------------------- DATA SELECTION & PREPROCESSING --------------------------//
