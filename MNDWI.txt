@@ -1,0 +1,69 @@
+/*************Modified Normalized Difference Water Index (MNDWI)******************/
+
+//select region of interest
+var geometry = /* color: #0b4a8b */ee.Geometry.Polygon(
+        [[[83.44237110328802, 21.781169428623837],
+          [83.77196094703802, 21.401922640675156],
+          [84.22240040016302, 21.6267814545492],
+          [83.8474919528974, 21.97232885354322]]]);
+          
+// Print polygon area in square kilometers.
+print('Polygon area: ', geometry.area().divide(1000 * 1000));
+
+// rename selected geometry feature 
+var aoi = ee.FeatureCollection(geometry);
+
+//// Load Sentinel-2 BOA surface reflectance data
+var s2 = ee.ImageCollection("COPERNICUS/S2_SR");
+
+
+//Function to mask clouds using QA60 band
+function maskS2clouds(image) {
+  var qa = image.select('QA60');
+
+  // Bits 10 and 11 are clouds and cirrus, respectively.
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+
+  // Both values should be set to zero
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+      .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+
+  // Masking out cloud cover from the image
+  return image.updateMask(mask).divide(10000);
+}
+
+
+// filter the image collection as per the requirement
+var filtered = s2.filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+  .filter(ee.Filter.date('2021-01-01', '2021-01-31'))
+  .filter(ee.Filter.bounds(aoi))
+ 
+// mask out the cloud cover from the image and clip it to the region of interest
+var image = filtered.map(maskS2clouds).median().clip(aoi); 
+
+
+// Calculate Modified Normalized Difference Water Index (MNDWI)
+// 'GREEN' (B3) and 'SWIR1' (B11)
+var mndwi = image.normalizedDifference(['B3', 'B11']);
+var mndwiViz = {min: 0.5, max: 1, palette: ['00FFFF', '0000FF']};
+Map.addLayer(mndwi, mndwiViz, 'MNDWI');
+Map.centerObject(aoi,9)
+
+// Mask the non-watery parts of the image, where MNDWI < 0.5
+var mndwiMasked = mndwi.updateMask(mndwi.gte(0.5));
+Map.addLayer(mndwiMasked, mndwiViz, 'MNDWI masked');
+
+
+// Create visualization layers.
+var imageRGB = image.visualize({bands: ['B8', 'B4', 'B3'], max: 0.5});
+var mndwiRGB = mndwiMasked.visualize({
+  min: 0.5,
+  max: 1,
+  palette: ['00FFFF', '0000FF']
+});
+
+// Mosaic the visualization layers and display it.
+var MNDWI_view = ee.ImageCollection([imageRGB, mndwiRGB]).mosaic();
+Map.addLayer(MNDWI_view, {}, 'Final_view');
+
