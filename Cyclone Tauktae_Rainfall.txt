@@ -1,0 +1,66 @@
+/**********************************************************************************************
+Cyclone Tauktae hit Gujarat state between 17th May to 19th May.
+
+30 minute IMERG precipitation product (mm/hr) was used to analyze rainfall pattern during this cyclone.
+
+Result shows that on 18th May there was more rainfall intensity specially in the south west gujarat.
+**********************************************************************************************/
+
+// Study area
+var table = ee.FeatureCollection("users/darshil/Gujarat_new");
+
+// Print polygon area in square kilometers.
+// print('Polygon area: ', table.area().divide(1000 * 1000));
+
+// rename selected geometry feature 
+var aoi = ee.FeatureCollection(table);
+
+Map.centerObject(aoi,7);
+
+var dataset = ee.ImageCollection("NASA/GPM_L3/IMERG_V06");
+
+var start= '2021-05-17';
+var end='2021-05-19';
+
+var collection = dataset.filterDate(start, end);
+
+var precipitation = collection.select('precipitationCal');
+
+print('IMERG_data_collection',precipitation);
+
+// Print selected tiles to the console
+
+      // Extract date from meta data
+      function dates(imgcol){
+        var range = imgcol.reduceColumns(ee.Reducer.minMax(), ["system:time_start"]);
+        var printed = ee.String('from ')
+          .cat(ee.Date(range.get('min')).format('YYYY-MM-dd'))
+          .cat(' to ')
+          .cat(ee.Date(range.get('max')).format('YYYY-MM-dd'));
+        return printed;
+      }
+      // print dates of before images to console
+      var count = precipitation.size();
+      print(ee.String('Tiles selected: IMERG_data ').cat('(').cat(count).cat(')'),
+        dates(collection), collection);
+
+
+
+// Chart the full time series for your region
+var TS_monthwise = ui.Chart.image.series(precipitation, aoi,ee.Reducer.mean(),1000,'system:time_start').setOptions({
+// title: 'Precipitation Full Time Series',
+vAxis: {title: 'mm/hr'}, });
+print(TS_monthwise);
+
+
+var vis = {
+  min: 0.7,
+  max: 17.0,
+  palette: ['001137', '0aab1e', 'e7eb05', 'ff4a2d', 'e90000'],
+};
+
+
+
+var day = precipitation.mean().clip(aoi);
+Map.addLayer(day,vis,'One day Precipitation');
+
